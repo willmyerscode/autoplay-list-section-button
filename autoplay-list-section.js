@@ -25,14 +25,6 @@
 
   const isBlocked = () => document.querySelector("body.sqs-edit-mode-active, .sqs-modal-lightbox-open, .wm-mega-menu--open");
 
-  /**
-   * Creates an autoplay instance for a single List Section.
-   * This function encapsulates all logic and state for one auto-scrolling section.
-   *
-   * @param {string} selector - The CSS selector to find the target list section.
-   * @param {object} cfg - The configuration object for this specific instance.
-   * @returns {object|null} An interface to control the instance, or null if initialization fails.
-   */
   function createAutoScroller(selector, cfg) {
     const targetElement = selector === "" ? document.querySelector(".user-items-list-section") : document.querySelector(selector);
     if (!targetElement) return null;
@@ -41,117 +33,19 @@
     const directionIndex = getDirectionIndex(cfg.direction);
     if (!arrows[directionIndex]) return null;
 
-    // --------------------------------------------------------------------------------
-    // STATE MANAGEMENT
-    //
-    // This component uses a dual-state system to manage autoplay behavior intelligently.
-    //
-    // 1. External State (`externalState`):
-    //    - Represents the user's explicit intent (e.g., clicking the play/pause button).
-    //    - It's the "source of truth" for what the user *wants* to happen.
-    //    - The UI (button icon) is always synced to this state.
-    //    - Values: 'playing' | 'paused'.
-    //
-    // 2. Internal State (`internalState`):
-    //    - Represents what the autoplay *engine* is actually doing (i.e., is the timer running?).
-    //    - It is determined by the external state AND environmental factors like
-    //      element visibility or site-wide blockers (e.g., Squarespace edit mode).
-    //    - This allows the autoplay to pause itself when off-screen, without changing
-    //      the user's intent to "playing". When it's visible again, it can resume automatically.
-    //    - Values: 'running' | 'stopped'.
-    // --------------------------------------------------------------------------------
+    // State (simplified to 4 variables)
+    let state = "playing";
+    let timer = null;
+    let cycleStart = Date.now();
+    let isVisible = true;
+    let progressRaf = null;
 
-    let externalState = "playing";
-    let internalState = "stopped";
-
-    // --- Timing State ---
-    // These variables manage the timer to allow for seamless pause and resume.
-    let timerId = null; // Stores the setTimeout ID.
-    let cycleStartTime = 0; // Timestamp of when the current cycle began.
-    let timeElapsedOnPause = 0; // How much time had passed in the cycle before it was paused.
-
-    // --- Environmental State ---
-    let isVisible = true; // Tracks element visibility via IntersectionObserver.
-    let progressRafId = null; // requestAnimationFrame ID for the progress ring animation.
-
-    // A flag to distinguish between programmatic clicks and user clicks.
-    let isAdvancingProgrammatically = false;
-
-    // ================================================================================
-    // CORE ENGINE
-    // ================================================================================
-
-    /**
-     * Advances the carousel to the next item and resets the cycle timer.
-     */
+    // Core functions
     const advance = () => {
-      // Extra safeguard: should not advance if the engine isn't supposed to be running.
-      if (internalState !== "running") return;
-      isAdvancingProgrammatically = true;
+      if (isBlocked() || !isVisible) return;
       arrows[directionIndex].click();
-      isAdvancingProgrammatically = false;
+      cycleStart = Date.now();
     };
-
-    /**
-     * Starts the autoplay timer engine.
-     * It can either start a fresh cycle or resume from where it left off.
-     */
-    const startEngine = () => {
-      if (internalState === "running") return;
-      internalState = "running";
-
-      // If resuming, adjust the start time to account for the time already elapsed.
-      // Otherwise, start a new cycle from scratch.
-      cycleStartTime = Date.now() - timeElapsedOnPause;
-      const remainingTime = cfg.timing * 1000 - timeElapsedOnPause;
-      timeElapsedOnPause = 0; // Reset for next pause
-
-      startProgressAnimation();
-
-      timerId = setTimeout(() => {
-        advance();
-        // After advancing, if the engine is still supposed to be running,
-        // we manually restart the next cycle. This fixes the main bug where
-        // the loop would not continue after the first cycle.
-        if (internalState === "running") {
-          internalState = "stopped"; // Temporarily set to stopped to allow startEngine to run
-          timeElapsedOnPause = 0; // Ensure it's a fresh cycle
-          startEngine(); // Start the next cycle
-        }
-      }, remainingTime);
-    };
-
-    /**
-     * Stops the autoplay timer engine and saves the elapsed time.
-     */
-    const stopEngine = () => {
-      if (internalState === "stopped") return;
-      internalState = "stopped";
-
-      clearTimeout(timerId);
-      timerId = null;
-      stopProgressAnimation();
-
-      // Record how far into the cycle we were, to allow for a smooth resume.
-      timeElapsedOnPause = Date.now() - cycleStartTime;
-    };
-
-    /**
-     * The central controller. Decides if the engine should be running based on all conditions.
-     * This function is called whenever any factor that affects autoplay changes.
-     */
-    const updateEngineState = () => {
-      const shouldRun = externalState === "playing" && isVisible && !isBlocked();
-      if (shouldRun) {
-        startEngine();
-      } else {
-        stopEngine();
-      }
-    };
-
-    // ================================================================================
-    // PROGRESS & UI
-    // ================================================================================
 
     const setProgressDegrees = deg => {
       if (!controlsArr.length) return;
@@ -159,66 +53,65 @@
     };
 
     const updateProgress = () => {
-      if (!controlsArr.length || internalState !== "running") return;
-      const elapsed = Date.now() - cycleStartTime;
+      if (!controlsArr.length) return;
+      const elapsed = Date.now() - cycleStart;
       const progress = Math.min(elapsed / (cfg.timing * 1000), 1);
       const degree = progress * 360;
       setProgressDegrees(degree);
     };
 
     const startProgressAnimation = () => {
-      stopProgressAnimation(); // Ensure no multiple animations are running
       const animate = () => {
         updateProgress();
-        if (internalState === "running") {
-          progressRafId = requestAnimationFrame(animate);
+        if (state === "playing") {
+          progressRaf = requestAnimationFrame(animate);
         }
       };
-      progressRafId = requestAnimationFrame(animate);
+      progressRaf = requestAnimationFrame(animate);
     };
 
     const stopProgressAnimation = () => {
-      if (progressRafId) {
-        cancelAnimationFrame(progressRafId);
-        progressRafId = null;
+      if (progressRaf) {
+        cancelAnimationFrame(progressRaf);
+        progressRaf = null;
       }
     };
 
-    // ================================================================================
-    // PUBLIC CONTROLS & UI BINDING
-    // ================================================================================
+    const startTimer = () => {
+      const elapsed = Date.now() - cycleStart;
+      const remaining = Math.max(0, cfg.timing * 1000 - elapsed);
 
-    /**
-     * Sets the user's intent to "playing".
-     * This is triggered by the play button.
-     */
+      startProgressAnimation();
+
+      timer = setTimeout(() => {
+        advance();
+        if (state === "playing") startTimer();
+      }, remaining);
+    };
+
     const play = () => {
-      if (externalState === "playing") return;
-      externalState = "playing";
+      if (state === "playing") return;
+      state = "playing";
+      cycleStart = Date.now(); // Reset to start fresh cycle
+      startTimer();
       updateUI();
-      updateEngineState();
     };
 
-    /**
-     * Sets the user's intent to "paused".
-     * This is triggered by the pause button.
-     */
     const pause = () => {
-      if (externalState === "paused") return;
-      externalState = "paused";
+      if (state === "paused") return;
+      state = "paused";
+      clearTimeout(timer);
+      timer = null;
+      stopProgressAnimation();
       updateUI();
-      updateEngineState();
     };
 
-    // --- UI Elements ---
+    // UI (support multiple control instances)
     const controlsArr = [];
     const buttonsArr = [];
 
-    /**
-     * Updates the UI elements (e.g., button icon) based on the *external state*.
-     */
     const updateUI = () => {
-      const isPaused = externalState === "paused";
+      const isPaused = state === "paused";
       buttonsArr.forEach(btn => {
         btn.innerHTML = isPaused ? cfg.playHTML : cfg.pauseHTML;
         btn.setAttribute("aria-label", isPaused ? "Play" : "Pause");
@@ -227,7 +120,7 @@
       controlsArr.forEach(c => c.classList.toggle("is-paused", isPaused));
     };
 
-    // --- Control Creation ---
+    // Create controls (desktop arrows, mobile arrows, or fallback)
     if (cfg.showControls) {
       const targets = [];
       const desktopBottom = targetElement.querySelector(".desktop-arrows .arrows-bottom");
@@ -256,11 +149,9 @@
 
         btn.addEventListener("click", e => {
           e.preventDefault();
-          // The button toggles the external (intended) state.
-          externalState === "paused" ? play() : pause();
+          state === "paused" ? play() : pause();
         });
 
-        // Prevent carousel drag from being triggered when clicking the button.
         ["mousedown", "mouseup", "touchstart", "touchend"].forEach(eventName => {
           btn.addEventListener(eventName, e => e.stopPropagation());
         });
@@ -281,33 +172,25 @@
       updateUI();
     }
 
-    // ================================================================================
-    // EVENT LISTENERS & INITIALIZATION
-    // ================================================================================
-
-    /**
-     * Resets the timer when the user manually navigates the carousel.
-     */
+    // Reset timer on manual navigation (works when playing or paused)
     const resetTimer = () => {
-      // Prevent programmatic advances from triggering a reset.
-      // The timer is reset manually in the startEngine timeout.
-      if (isAdvancingProgrammatically) return;
-
-      // Stop the current engine cycle.
-      stopEngine();
-      // Reset the elapsed time and progress ring.
-      timeElapsedOnPause = 0;
+      cycleStart = Date.now();
+      clearTimeout(timer);
+      stopProgressAnimation();
+      // Always reset visual progress to 0
       setProgressDegrees(0);
-      // Immediately re-evaluate the engine state. If the external state is
-      // 'playing', this will start a fresh cycle.
-      updateEngineState();
+      if (state === "playing") {
+        startTimer();
+      }
+      updateUI();
     };
 
-    // --- Manual Navigation Listeners ---
-    targetElement.querySelectorAll("button.user-items-list-carousel__arrow-button, button.mobile-arrow-button").forEach(btn => {
+    // Arrow button clicks
+    targetElement.querySelectorAll("button[aria-label*='Next'], button[aria-label*='Previous'], button.mobile-arrow-button").forEach(btn => {
       btn.addEventListener("click", resetTimer);
     });
 
+    // Drag interactions on the carousel list (click & drag only)
     const carouselList = targetElement.querySelector("ul");
     if (carouselList) {
       let dragStart = null;
@@ -329,6 +212,7 @@
           const clientY = e.touches ? e.touches[0].clientY : e.clientY;
           const deltaX = Math.abs(clientX - dragStart.x);
           const deltaY = Math.abs(clientY - dragStart.y);
+          // Consider it a drag if moved more than 5px in any direction
           if (deltaX > 5 || deltaY > 5) {
             hasMoved = true;
           }
@@ -344,44 +228,36 @@
           hasMoved = false;
         });
       });
+
+      // Do not reset on simple click; only on drag per spec
     }
 
-    // --- Environmental Listeners ---
+    // Remove general quick mousedown-based pause; only toggle button controls state
 
-    // Pause/resume when the browser tab visibility changes.
     document.addEventListener("visibilitychange", () => {
-      // Don't change the user's intent, just re-evaluate the engine state.
-      updateEngineState();
+      if (document.hidden) pause();
     });
 
-    // Pause/resume when the element scrolls into or out of view.
+    // Visibility observer
     if (window.IntersectionObserver) {
       const observer = new IntersectionObserver(
         entries => {
           isVisible = entries[0].isIntersecting;
-          // Re-evaluate the engine state based on the new visibility.
-          updateEngineState();
         },
         {rootMargin: cfg.rootMargin}
       );
       observer.observe(targetElement);
     }
 
-    // --- Initial Kick-off ---
-    updateUI();
-    updateEngineState();
+    // Start playing
+    startTimer();
 
     return {
       targetElement,
       play,
       pause,
-      // Expose the external state for debugging or external control.
       get isPaused() {
-        return externalState === "paused";
-      },
-      // Expose internal state for debugging.
-      get internalState() {
-        return internalState;
+        return state === "paused";
       },
     };
   }
