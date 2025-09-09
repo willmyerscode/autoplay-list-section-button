@@ -1,0 +1,153 @@
+.wm-autoplay-controls {
+  position: relative;
+  display: grid;
+  place-items: center;
+  z-index: 5;
+  pointer-events: none;
+  --progress: 0deg;
+}
+.wm-autoplay-controls > * {
+  grid-area: 1 / 1;
+}
+
+.wm-autoplay-controls:not(.is-paused)::before {
+  opacity: 1;
+}
+
+.wm-autoplay-controls--bg {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--list-section-banner-slideshow-arrow-background-color);
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+  z-index: 1;
+}
+.wm-autoplay-controls:hover .wm-autoplay-controls--bg {
+  opacity: 1;
+}
+
+.wm-autoplay-controls::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  rotate: 90deg;
+  background: conic-gradient(from -90deg, var(--list-section-banner-slideshow-arrow-background-color, rgba(255, 255, 255, 0.8)) var(--progress), transparent var(--progress));
+  mask: radial-gradient(circle, transparent 32px, black 32px);
+  -webkit-mask: radial-gradient(circle, transparent 32px, black 32px);
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+button.wm-autoplay-toggle {
+  pointer-events: auto;
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  place-items: center;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  background: none;
+  color: var(--list-section-banner-slideshow-arrow-color);
+  font: inherit;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.wm-autoplay-toggle svg {
+  height: 28px;
+  width: 28px;
+}
+
+/*Mobile Arrows*/
+.mobile-arrows .wm-autoplay-controls {
+  width: 48px;
+  height: 48px;
+}
+.mobile-arrows .wm-autoplay-toggle {
+  height: 40px;
+  width: 40px;
+}
+.mobile-arrows .wm-autoplay-toggle svg {
+  height: 20px;
+  width: 20px;
+}
+.mobile-arrows .wm-autoplay-controls--bg {
+  height: 40px;
+  width: 40px;
+  opacity: 1;
+}
+.mobile-arrows .wm-autoplay-controls::before {
+  top: 0px;
+  left: 0px;
+  right: 0px;
+  bottom: 0px;
+  mask: radial-gradient(circle, transparent 22px, black 22px);
+  -webkit-mask: radial-gradient(circle, transparent 22px, black 22px);
+}
+
+.mobile-arrows:has(.wm-autoplay-controls) .mobile-arrow-button--left {
+  order: 1;
+}
+.mobile-arrows:has(.wm-autoplay-controls) .wm-autoplay-controls {
+  order: 2;
+  margin-right: 10px;
+}
+.mobile-arrows:has(.wm-autoplay-controls) .mobile-arrow-button--right {
+  order: 3;
+}
+
+/* Desktop Arrows Bottom*/
+.desktop-arrows .arrows-bottom:has(.wm-autoplay-controls) {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.desktop-arrows .arrows-bottom:has(.wm-autoplay-controls) [aria-label*="Previous"] {
+  order: 1;
+}
+
+.desktop-arrows .arrows-bottom:has(.wm-autoplay-controls) .wm-autoplay-controls {
+  order: 2;
+}
+.desktop-arrows .arrows-bottom:has(.wm-autoplay-controls) [aria-label*="Next"] {
+  order: 3;
+}
+
+/* Desktop Controls On Arrows Center */
+
+.desktop-controls-container {
+  display: grid;
+  place-items: center;
+  align-items: center;
+  width: 100%;
+
+  z-index: 1;
+  padding: 0 3vw;
+  box-sizing: border-box;
+  max-width: var(--sqs-site-max-width);
+  margin: auto;
+}
+.user-items-list-banner-slideshow .desktop-controls-container {
+  position: absolute;
+  bottom: 20px;
+  left: 0;
+}
+.desktop-controls-container > .wm-autoplay-controls {
+  width: 60px;
+  height: 60px;
+}
+@media (max-width: 576px) {
+  .desktop-controls-container {
+    display: none;
+    bottom: 3vw;
+  }
+  .user-items-list-banner-slideshow .desktop-controls-container {
+    bottom: 3vw;
+  }
+}
